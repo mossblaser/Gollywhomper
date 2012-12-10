@@ -18,6 +18,8 @@ from packet import SpiNNakerP2PPacket
 
 from router import SpiNNakerRouter
 
+from core import SpiNNakerTrafficGenerator
+
 import topology
 
 class SchedulerTests(unittest.TestCase):
@@ -725,6 +727,186 @@ class RouterTests(unittest.TestCase):
 			
 			# Not emergency routed
 			self.assertFalse(packet.emergency)
+
+
+
+class SpiNNakerTrafficGeneratorTests(unittest.TestCase):
+	"""
+	Tests the router
+	"""
+	
+	def test_uniform(self):
+		# Test that packets are generated appropriately when distributing with a
+		# uniform distribution.
+		
+		scheduler = Scheduler()
+		system = SpiNNakerSystem(scheduler, 10)
+		
+		# Share the same link for sending and receiving, that way the module cleans
+		# up after itself!
+		link = BufferLink(scheduler)
+		
+		# Uniform generator node
+		tg = SpiNNakerTrafficGenerator( scheduler
+		                              , system
+		                              , 1
+		                              , 0.1
+		                              , link
+		                              , link
+		                              , (100,100)
+		                              , (50,50)
+		                              )
+		
+		it = scheduler.run()
+		
+		# Perform 1000 cycles
+		while it.next() < 2000 and tg.counters["generator_cycles"] < 1000:
+			# We may have a packet
+			if link.can_receive():
+				# Check the packet is targeted somewhere in the mesh
+				packet = link.receive()
+				self.assertTrue(all(0 <= dimension < 100 for dimension in packet.destination))
+		
+		# Should have done 1000 cycles
+		self.assertEqual(tg.counters["generator_cycles"], 1000)
+		
+		# We should have sent some number of packets that isn't all the time and not
+		# never (well, in theory we might not but hey, if this is going wrong you've
+		# got a bad day on your hands).
+		self.assertTrue(10 < tg.counters["generator_injected_packets"] < 1000)
+		
+		# None should be dropped
+		self.assertEqual(tg.counters["generator_dropped_packets"], 0)
+	
+	
+	def test_normal(self):
+		# Test that packets are generated appropriately when distributing with a
+		# normal distribution.
+		
+		scheduler = Scheduler()
+		system = SpiNNakerSystem(scheduler, 10)
+		
+		# Share the same link for sending and receiving, that way the module cleans
+		# up after itself!
+		link = BufferLink(scheduler)
+		
+		# Uniform generator node
+		tg = SpiNNakerTrafficGenerator( scheduler
+		                              , system
+		                              , 1
+		                              , 0.1
+		                              , link
+		                              , link
+		                              , (100,100)
+		                              , (50,50)
+		                              , 10
+		                              )
+		
+		it = scheduler.run()
+		
+		# Perform 1000 cycles
+		while it.next() < 2000 and tg.counters["generator_cycles"] < 1000:
+			# We may have a packet
+			if link.can_receive():
+				# Check the packet is targeted somewhere in the mesh
+				packet = link.receive()
+				self.assertTrue(all(0 <= dimension < 100 for dimension in packet.destination))
+		
+		# XXX: Should probably check that distribution is appropriate too but meh...
+		
+		# Should have done 1000 cycles
+		self.assertEqual(tg.counters["generator_cycles"], 1000)
+		
+		# We should have sent some number of packets that isn't all the time and not
+		# never (well, in theory we might not but hey, if this is going wrong you've
+		# got a bad day on your hands).
+		self.assertTrue(10 < tg.counters["generator_injected_packets"] < 1000)
+		
+		# None should be dropped
+		self.assertEqual(tg.counters["generator_dropped_packets"], 0)
+	
+	
+	def test_block(self):
+		# Test that packets are not generated when the link is blocked.
+		
+		scheduler = Scheduler()
+		system = SpiNNakerSystem(scheduler, 10)
+		
+		link = DeadLink(scheduler)
+		
+		# Uniform generator node
+		tg = SpiNNakerTrafficGenerator( scheduler
+		                              , system
+		                              , 1
+		                              , 0.1
+		                              , link
+		                              , link
+		                              , (100,100)
+		                              , (50,50)
+		                              )
+		
+		it = scheduler.run()
+		
+		# Perform 1000 cycles
+		while it.next() < 2000 and tg.counters["generator_cycles"] < 1000:
+			pass
+		
+		# Should have done 1000 cycles
+		self.assertEqual(tg.counters["generator_cycles"], 1000)
+		
+		# We should have tried to send some number of packets that isn't all the
+		# time and not never (well, in theory we might not but hey, if this is going
+		# wrong you've got a bad day on your hands).
+		self.assertTrue(10 < tg.counters["generator_dropped_packets"] < 1000)
+		
+		# None should have gone out
+		self.assertEqual(tg.counters["generator_injected_packets"], 0)
+	
+	
+	
+	
+	def test_receive(self):
+		# Test that packets are received by the unit
+		
+		scheduler = Scheduler()
+		system = SpiNNakerSystem(scheduler, 10)
+		
+		# Share the same link for sending and receiving, that way the module cleans
+		# up after itself!
+		link = BufferLink(scheduler)
+		packet = SpiNNakerP2PPacket(system, None, (0,0), 1)
+		
+		# Uniform generator node
+		tg = SpiNNakerTrafficGenerator( scheduler
+		                              , system
+		                              , 1
+		                              , 0
+		                              , link
+		                              , link
+		                              , (100,100)
+		                              , (50,50)
+		                              , 10
+		                              )
+		
+		it = scheduler.run()
+		
+		# Perform 10 cycles, injecting some packets each time
+		while it.next() < 20 and tg.counters["generator_cycles"] < 10:
+			self.assertTrue(link.can_send())
+			link.send(packet)
+		
+		# Should have done 10 cycles
+		self.assertEqual(tg.counters["generator_cycles"], 10)
+		
+		# We should have sent no packets
+		self.assertEqual(tg.counters["generator_injected_packets"], 0)
+		
+		# None should be dropped
+		self.assertEqual(tg.counters["generator_dropped_packets"], 0)
+		
+		# Should have received 10 packets
+		self.assertEqual(tg.counters["generator_packets_received"], 10)
+	
 
 
 if __name__=="__main__":
