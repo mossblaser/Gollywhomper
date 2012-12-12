@@ -20,6 +20,9 @@ from router import SpiNNakerRouter
 
 from core import SpiNNakerTrafficGenerator
 
+from network import SpiNNaker101
+from network import SpiNNaker103
+
 import topology
 
 class SchedulerTests(unittest.TestCase):
@@ -279,6 +282,47 @@ class TopologyTests(unittest.TestCase):
 	Tests the topology utility functions
 	"""
 	
+	def test_next(self):
+		cw  = topology.next_cw
+		ccw = topology.next_ccw
+		
+		# Clockwise
+		self.assertEqual(cw(topology.EAST),       topology.SOUTH)
+		self.assertEqual(cw(topology.NORTH_EAST), topology.EAST)
+		self.assertEqual(cw(topology.NORTH),      topology.NORTH_EAST)
+		self.assertEqual(cw(topology.WEST),       topology.NORTH)
+		self.assertEqual(cw(topology.SOUTH_WEST), topology.WEST)
+		self.assertEqual(cw(topology.SOUTH),      topology.SOUTH_WEST)
+		
+		# Counter-Clockwise
+		self.assertEqual(ccw(topology.EAST),       topology.NORTH_EAST)
+		self.assertEqual(ccw(topology.NORTH_EAST), topology.NORTH)
+		self.assertEqual(ccw(topology.NORTH),      topology.WEST)
+		self.assertEqual(ccw(topology.WEST),       topology.SOUTH_WEST)
+		self.assertEqual(ccw(topology.SOUTH_WEST), topology.SOUTH)
+		self.assertEqual(ccw(topology.SOUTH),      topology.EAST)
+	
+	def test_opposite(self):
+		opp = topology.opposite
+		
+		self.assertEqual(opp(topology.EAST),       topology.WEST)
+		self.assertEqual(opp(topology.NORTH_EAST), topology.SOUTH_WEST)
+		self.assertEqual(opp(topology.NORTH),      topology.SOUTH)
+		self.assertEqual(opp(topology.WEST),       topology.EAST)
+		self.assertEqual(opp(topology.SOUTH_WEST), topology.NORTH_EAST)
+		self.assertEqual(opp(topology.SOUTH),      topology.NORTH)
+	
+	def test_direction(self):
+		ad = topology.add_direction
+		
+		self.assertEqual(ad((11,11,11), topology.EAST),       (12,11,11))
+		self.assertEqual(ad((11,11,11), topology.NORTH_EAST), (11,11,10))
+		self.assertEqual(ad((11,11,11), topology.NORTH),      (11,12,11))
+		self.assertEqual(ad((11,11,11), topology.WEST),       (10,11,11))
+		self.assertEqual(ad((11,11,11), topology.SOUTH_WEST), (11,11,12))
+		self.assertEqual(ad((11,11,11), topology.SOUTH),      (11,10,11))
+	
+	
 	def test_manhattan(self):
 		self.assertEqual(topology.manhattan([0]),      0)
 		self.assertEqual(topology.manhattan([1]),      1)
@@ -303,6 +347,14 @@ class TopologyTests(unittest.TestCase):
 		self.assertEqual(topology.to_shortest_path((0,1,2)), (-1,0,1))
 		self.assertEqual(topology.to_shortest_path((-2,0,2)), (-2,0,2))
 	
+	
+	def test_to_xy(self):
+		self.assertEqual(topology.to_xy((0,0,0)), (0,0))
+		self.assertEqual(topology.to_xy((1,1,1)), (0,0))
+		self.assertEqual(topology.to_xy((0,1,2)), (-2,-1))
+		self.assertEqual(topology.to_xy((-2,0,2)), (-4,-2))
+	
+	
 	def test_get_path(self):
 		gp = topology.get_path
 		# Simple case (just a delta and to_shortest_path
@@ -320,6 +372,77 @@ class TopologyTests(unittest.TestCase):
 		self.assertEqual(gp((0,0,0), (11,0,0),  (12,12)), (-1,0,0))
 		self.assertEqual(gp((0,0,0), (0,11,0),  (12,12)), (0,-1,0))
 		self.assertEqual(gp((0,0,0), (11,11,0), (12,12)), (0,0,1))
+	
+	
+	def test_hexagon(self):
+		it = topology.hexagon(2)
+		
+		# Inner layer
+		self.assertEqual(it.next(), ( 0, 0))
+		self.assertEqual(it.next(), (-1, 0))
+		self.assertEqual(it.next(), ( 0, 1))
+		
+		# Outer layer
+		self.assertEqual(it.next(), ( 1, 1))
+		self.assertEqual(it.next(), ( 1, 0))
+		self.assertEqual(it.next(), ( 0,-1))
+		self.assertEqual(it.next(), (-1,-1))
+		self.assertEqual(it.next(), (-2,-1))
+		self.assertEqual(it.next(), (-2, 0))
+		self.assertEqual(it.next(), (-1, 1))
+		self.assertEqual(it.next(), ( 0, 2))
+		self.assertEqual(it.next(), ( 1, 2))
+		
+		# Stop now
+		self.assertRaises(StopIteration, it.next)
+	
+	def test_hexagon_edge_link(self):
+		# Get the set of edge nodes for a 4-layer hexagon
+		all_nodes   = set(topology.hexagon(4))
+		inner_nodes = set(topology.hexagon(3))
+		outer_nodes = all_nodes - inner_nodes
+		
+		directions = [
+			topology.EAST,
+			topology.NORTH_EAST,
+			topology.NORTH,
+			topology.WEST,
+			topology.SOUTH_WEST,
+			topology.SOUTH
+		]
+		
+		edges = [
+			topology.EDGE_TOP_LEFT,
+			topology.EDGE_TOP,
+			topology.EDGE_TOP_RIGHT,
+			topology.EDGE_BOTTOM_RIGHT,
+			topology.EDGE_BOTTOM,
+		  topology.EDGE_BOTTOM_LEFT,
+		]
+		
+		# Get the set of outward-facing links as (node_xy,direction) pairs
+		outward_facing_links = []
+		for node in all_nodes:
+			for direction in directions:
+				# Get the node that this link would connect to
+				facing_node = topology.to_xy(
+					topology.add_direction(topology.zero_pad(node), direction))
+				# If that node isn't part of our set, it is an edge link
+				if facing_node not in all_nodes:
+					outward_facing_links.append((node, direction))
+		
+		# Get the set of outward facing links according to the function under test
+		all_links = []
+		for edge in edges:
+			for num in range(8):
+				all_links.append(topology.hexagon_edge_link(edge, num, 4))
+		
+		# No duplicates
+		self.assertEqual(len(all_links), len(set(all_links)))
+		
+		# The algorithm gets every outward facing edge
+		self.assertEqual(set(all_links), set(outward_facing_links))
+		
 
 
 
@@ -354,8 +477,6 @@ class RouterTests(unittest.TestCase):
 		
 		self.router = SpiNNakerRouter( self.scheduler
 		                             , self.system
-		                             , RouterTests.MESH_DIMENSIONS
-		                             , RouterTests.MESH_POSITION
 		                             , self.injection_link
 		                             , self.exit_link
 		                             , self.in_links
@@ -364,6 +485,8 @@ class RouterTests(unittest.TestCase):
 		                             , RouterTests.WAIT_BEFORE_EMERGENCY
 		                             , RouterTests.WAIT_BEFORE_DROP
 		                             )
+		self.router.set_mesh_dimensions(*RouterTests.MESH_DIMENSIONS)
+		self.router.set_mesh_position(*RouterTests.MESH_POSITION)
 	
 	
 	def test_nothing(self):
@@ -381,7 +504,7 @@ class RouterTests(unittest.TestCase):
 		# The router remained idle...
 		self.assertEqual(self.router.counters["timestamp_packet_timeout"], 0)
 		self.assertEqual(self.router.counters["router_packet_timeout"], 0)
-		self.assertEqual(self.router.counters["packet_routed"], 0)
+		self.assertEqual(self.router.counters["packets_routed"], 0)
 		self.assertEqual(self.router.counters["packet_emergency_routed"], 0)
 		self.assertEqual(self.router.counters["router_blocked_cycles"], 0)
 		
@@ -423,7 +546,7 @@ class RouterTests(unittest.TestCase):
 		# The router sent one packet...
 		self.assertEqual(self.router.counters["timestamp_packet_timeout"], 0)
 		self.assertEqual(self.router.counters["router_packet_timeout"], 0)
-		self.assertEqual(self.router.counters["packet_routed"], 1)
+		self.assertEqual(self.router.counters["packets_routed"], 1)
 		self.assertEqual(self.router.counters["packet_emergency_routed"], 0)
 		self.assertEqual(self.router.counters["router_blocked_cycles"], 0)
 		self.assertEqual(self.router.counters["router_idle_cycles"], 0)
@@ -485,7 +608,7 @@ class RouterTests(unittest.TestCase):
 			# The router sent one packet...
 			self.assertEqual(self.router.counters["timestamp_packet_timeout"], 0)
 			self.assertEqual(self.router.counters["router_packet_timeout"], 0)
-			self.assertEqual(self.router.counters["packet_routed"], 1)
+			self.assertEqual(self.router.counters["packets_routed"], 1)
 			self.assertEqual(self.router.counters["packet_emergency_routed"], 0)
 			self.assertEqual(self.router.counters["router_blocked_cycles"], 0)
 			self.assertEqual(self.router.counters["router_idle_cycles"], 0)
@@ -559,7 +682,7 @@ class RouterTests(unittest.TestCase):
 			# The router sent one packet...
 			self.assertEqual(self.router.counters["timestamp_packet_timeout"], 0)
 			self.assertEqual(self.router.counters["router_packet_timeout"], 0)
-			self.assertEqual(self.router.counters["packet_routed"], 0)
+			self.assertEqual(self.router.counters["packets_routed"], 0)
 			self.assertEqual(self.router.counters["packet_emergency_routed"], 1)
 			self.assertEqual(self.router.counters["router_idle_cycles"], 0)
 			
@@ -627,7 +750,7 @@ class RouterTests(unittest.TestCase):
 			# The router sent one packet...
 			self.assertEqual(self.router.counters["timestamp_packet_timeout"], 0)
 			self.assertEqual(self.router.counters["router_packet_timeout"], 0)
-			self.assertEqual(self.router.counters["packet_routed"], 1)
+			self.assertEqual(self.router.counters["packets_routed"], 1)
 			self.assertEqual(self.router.counters["packet_emergency_routed"], 0)
 			self.assertEqual(self.router.counters["router_idle_cycles"], 0)
 			self.assertEqual(self.router.counters["router_blocked_cycles"], 0)
@@ -704,7 +827,7 @@ class RouterTests(unittest.TestCase):
 			# The router dropped one packet...
 			self.assertEqual(self.router.counters["timestamp_packet_timeout"], 0)
 			self.assertEqual(self.router.counters["router_packet_timeout"], 1)
-			self.assertEqual(self.router.counters["packet_routed"], 0)
+			self.assertEqual(self.router.counters["packets_routed"], 0)
 			self.assertEqual(self.router.counters["packet_emergency_routed"], 0)
 			
 			# We blocked until the wait threshold was exhausted
@@ -753,9 +876,9 @@ class SpiNNakerTrafficGeneratorTests(unittest.TestCase):
 		                              , 0.1
 		                              , link
 		                              , link
-		                              , (100,100)
-		                              , (50,50)
 		                              )
+		tg.set_mesh_dimensions(100,100)
+		tg.set_mesh_position(50,50)
 		
 		it = scheduler.run()
 		
@@ -797,10 +920,10 @@ class SpiNNakerTrafficGeneratorTests(unittest.TestCase):
 		                              , 0.1
 		                              , link
 		                              , link
-		                              , (100,100)
-		                              , (50,50)
 		                              , 10
 		                              )
+		tg.set_mesh_dimensions(100,100)
+		tg.set_mesh_position(50,50)
 		
 		it = scheduler.run()
 		
@@ -841,9 +964,9 @@ class SpiNNakerTrafficGeneratorTests(unittest.TestCase):
 		                              , 0.1
 		                              , link
 		                              , link
-		                              , (100,100)
-		                              , (50,50)
 		                              )
+		tg.set_mesh_dimensions(100,100)
+		tg.set_mesh_position(50,50)
 		
 		it = scheduler.run()
 		
@@ -883,10 +1006,10 @@ class SpiNNakerTrafficGeneratorTests(unittest.TestCase):
 		                              , 0
 		                              , link
 		                              , link
-		                              , (100,100)
-		                              , (50,50)
 		                              , 10
 		                              )
+		tg.set_mesh_dimensions(100,100)
+		tg.set_mesh_position(50,50)
 		
 		it = scheduler.run()
 		
@@ -906,7 +1029,213 @@ class SpiNNakerTrafficGeneratorTests(unittest.TestCase):
 		
 		# Should have received 10 packets
 		self.assertEqual(tg.counters["generator_packets_received"], 10)
+
+
+
+
+class SpiNNaker101Tests(unittest.TestCase):
+	"""
+	Tests a chip in a very vague way...
+	"""
 	
+	def setUp(self):
+		# Test that packets are generated appropriately when distributing with a
+		# uniform distribution.
+		
+		self.scheduler = Scheduler()
+		self.system = SpiNNakerSystem(self.scheduler, 50000000)
+		
+		self.chip = SpiNNaker101( self.scheduler
+		                        , self.system
+		                        , 4 # injection_buffer_length
+		                        , 10 # router_period
+		                        , 300000000
+		                        , 600000000
+		                        , 1 # core_period
+		                        , 1.0
+		                        , None
+		                        )
+	
+	
+	def test_loopback(self):
+		it = self.scheduler.run()
+		
+		# Perform 1000 cycles
+		while it.next() < 4001:
+			pass
+		
+		# Should have allowed all but 4 packets which are still in the queue
+		self.assertEqual(
+			self.chip.traffic_generator.counters["generator_injected_packets"] -
+			self.chip.traffic_generator.counters["generator_packets_received"],
+			4)
+		
+		# Should have routed one packet per ten cycles...
+		self.assertEqual(self.chip.router.counters["packets_routed"], 400)
+	
+	
+	def test_external(self):
+		# Put the chip in a large mesh so stuff ends up there
+		self.chip.set_mesh_dimensions(1000,1000)
+		
+		it = self.scheduler.run()
+		
+		# Perform 1000 cycles
+		while it.next() < 4001:
+			pass
+		
+		# Should have allowed very few packets through
+		self.assertTrue(
+			self.chip.traffic_generator.counters["generator_injected_packets"] < 10)
+		
+		# The router should be very frustrated
+		self.assertTrue(self.chip.router.counters["router_blocked_cycles"] > 300)
+
+
+class SpiNNaker103Tests(unittest.TestCase):
+	"""
+	Tests a chip in a very vague way...
+	"""
+	
+	def setUp(self):
+		# Test that packets are generated appropriately when distributing with a
+		# uniform distribution.
+		
+		self.scheduler = Scheduler()
+		self.system = SpiNNakerSystem(self.scheduler, 50000000)
+		
+		self.board = SpiNNaker103( self.scheduler
+		                         , self.system
+		                         , 7 # link_send_cycles
+		                         , 7 # link_ack_cycles
+		                         , 4 # injection_buffer_length
+		                         , 10 # router_period
+		                         , 300000000
+		                         , 600000000
+		                         , 1 # core_period
+		                         , 1.0
+		                         , None
+		                         )
+		# Set the mesh position so that the elements have the same coordinates as
+		# their internal offset.
+		self.board.set_mesh_position(-4,-3)
+	
+	
+	def test_chips(self):
+		# A board should have chips in the correct locations and no repeats
+		self.assertEqual(len(self.board.chips), 48)
+		self.assertEqual(set(self.board.chips.iterkeys()),
+		                 set(topology.hexagon(4)))
+		
+		# For all inputs & outputs, if there is a chip in that direction it must be
+		# connected via a SilistixLink and if not it should be attached to a
+		# DeadLink.
+		for src_pos, src_chip in self.board.chips.iteritems():
+			for direction in ( topology.EAST
+			                 , topology.NORTH_EAST
+			                 , topology.NORTH
+			                 , topology.WEST
+			                 , topology.SOUTH_WEST
+			                 , topology.SOUTH
+			                 ):
+				in_link  = src_chip.get_in_link(direction)
+				out_link = src_chip.get_out_link(direction)
+				
+				dst_pos = topology.to_xy(topology.add_direction(topology.zero_pad(src_pos),
+				                                                direction))
+				if dst_pos in self.board.chips:
+					# There is a chip opposite this connection
+					dst_chip = self.board.chips[dst_pos]
+					direction = topology.opposite(direction)
+					
+					# Check that they have the same link (connected to opposite ports)
+					self.assertEqual(out_link, dst_chip.get_in_link(direction))
+					self.assertEqual(in_link,  dst_chip.get_out_link(direction))
+					
+					# And that they're SilistixLinks
+					self.assertEqual(type(in_link), SilistixLink)
+					self.assertEqual(type(out_link), SilistixLink)
+				else:
+					# No adjacent chip so should be DeadLinks
+					self.assertEqual(type(in_link), DeadLink)
+					self.assertEqual(type(out_link), DeadLink)
+	
+	
+	def test_set_mesh_position(self):
+		# Test the initial positions are as expected
+		for pos, chip in self.board.chips.iteritems():
+			self.assertEqual(pos, chip.router.mesh_position)
+	
+	
+	def test_left_right(self):
+		# Test the left and right cuts don't overlap and that they're correct
+		
+		# Move all the left side out of the way
+		self.board.set_mesh_position_left(100-4,100-3)
+		for pos, chip in self.board.chips.iteritems():
+			if pos[0] < 0:
+				# If on the left, should have been moved
+				self.assertEqual(chip.router.mesh_position, (pos[0]+100, pos[1]+100))
+			else:
+				# If on the right, should have stayed
+				self.assertEqual(chip.router.mesh_position, pos)
+		
+		# Move the right side to meet it
+		self.board.set_mesh_position_right(100,100-3)
+		for pos, chip in self.board.chips.iteritems():
+			# All the chips should now have moved
+			self.assertEqual(chip.router.mesh_position, (pos[0]+100, pos[1]+100))
+	
+	
+	def test_top_bottom(self):
+		# Test the top and bottom cuts don't overlap and that they're correct
+		
+		# Move all the bottom side out of the way
+		self.board.set_mesh_position_bottom(100-4,100-3)
+		for pos, chip in self.board.chips.iteritems():
+			if pos[1] <= 0:
+				# If on the bottom, should have been moved
+				self.assertEqual(chip.router.mesh_position, (pos[0]+100, pos[1]+100))
+			else:
+				# If on the top, should have stayed
+				self.assertEqual(chip.router.mesh_position, pos)
+		
+		# Move the top side to meet it
+		self.board.set_mesh_position_top(100-3,100+1)
+		for pos, chip in self.board.chips.iteritems():
+			# All the chips should now have moved
+			self.assertEqual(chip.router.mesh_position, (pos[0]+100, pos[1]+100))
+	
+	
+	def test_get_set_outer_links(self):
+		edges = [
+			topology.EDGE_TOP_LEFT,
+			topology.EDGE_TOP,
+			topology.EDGE_TOP_RIGHT,
+			topology.EDGE_BOTTOM_RIGHT,
+			topology.EDGE_BOTTOM,
+		  topology.EDGE_BOTTOM_LEFT,
+		]
+		
+		test_link = DeadLink(self.scheduler)
+		
+		for edge in edges:
+			for num in range(8):
+				# Make sure all external links are dead
+				self.assertEqual(type(self.board.get_in_link(edge,num)),  DeadLink)
+				self.assertEqual(type(self.board.get_out_link(edge,num)), DeadLink)
+				
+				# Make sure nobody else over-wrote the node and overwrite the node
+				self.assertNotEqual(self.board.get_in_link(edge,num), test_link)
+				self.board.set_in_link(edge,num,test_link)
+				self.assertEqual(self.board.get_in_link(edge,num), test_link)
+				
+				# And for out links...
+				self.assertNotEqual(self.board.get_out_link(edge,num), test_link)
+				self.board.set_out_link(edge,num,test_link)
+				self.assertEqual(self.board.get_out_link(edge,num), test_link)
+
+
 
 
 if __name__=="__main__":

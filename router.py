@@ -23,8 +23,6 @@ class SpiNNakerRouter(object):
 	def __init__( self
 	            , scheduler
 	            , system
-	            , mesh_dimensions
-	            , mesh_position
 	            , injection_link
 	            , exit_link
 	            , in_links
@@ -34,18 +32,16 @@ class SpiNNakerRouter(object):
 	            , wait_before_drop
 	            ):
 		"""
-		mesh_dimensions is a tuple containing the (width, height) of the network
-		
-		mesh_position is a tuple (x, y) containing the position of the node
-		
 		injection_link is a link from which new packets are being issued by the local
 		cores.
 		
 		exit_link is the link down which packets targeted at this router arrive
 		
-		in_links is a list [E, NE, N, W, SW, S] of inbound links
+		in_links is a list [E, NE, N, W, SW, S] of inbound links. This is always
+		accessed by reference.
 		
-		out_links is a list [E, NE, N, W, SW, S] of outbound links
+		out_links is a list [E, NE, N, W, SW, S] of outbound links. This is always
+		accessed by reference.
 		
 		period is the number of cycles between each routing step.
 		
@@ -58,9 +54,6 @@ class SpiNNakerRouter(object):
 		self.scheduler = scheduler
 		self.system    = system
 		
-		self.mesh_dimensions = mesh_dimensions
-		self.mesh_position   = mesh_position
-		
 		self.injection_link = injection_link
 		self.exit_link      = exit_link
 		self.in_links       = in_links
@@ -69,6 +62,11 @@ class SpiNNakerRouter(object):
 		self.period                = period
 		self.wait_before_emergency = wait_before_emergency
 		self.wait_before_drop      = wait_before_drop
+		
+		# The only chip in a one chip system
+		self.mesh_dimensions = (1,1)
+		self.mesh_position   = (0,0)
+		
 		
 		# Stat counters
 		self.counters = {
@@ -79,7 +77,7 @@ class SpiNNakerRouter(object):
 			"router_packet_timeout" : 0,
 			
 			# A packet was forwarded successfully
-			"packet_routed" : 0,
+			"packets_routed" : 0,
 			
 			# A packet was forwarded successfully via an emergency route
 			"packet_emergency_routed" : 0,
@@ -100,6 +98,20 @@ class SpiNNakerRouter(object):
 		
 		# Schedule the routing step
 		self.scheduler.do_later(self.do_route, self.period)
+	
+	
+	def set_mesh_dimensions(self, w, h):
+		"""
+		Set the size of the mesh this router is part of.
+		"""
+		self.mesh_dimensions = (w,h)
+	
+	
+	def set_mesh_position(self, x, y):
+		"""
+		Set the X and Y coordinates of the system the router is part of.
+		"""
+		self.mesh_position = (x,y)
 	
 	
 	def do_route(self):
@@ -136,7 +148,7 @@ class SpiNNakerRouter(object):
 					packet.wait      = 0
 					packet.emergency = False
 					dst_link.send(src_link.receive())
-					self.counters["packet_routed"] += 1
+					self.counters["packets_routed"] += 1
 					
 					blocked = False
 					
@@ -210,7 +222,7 @@ class SpiNNakerRouter(object):
 			
 			# The packet is being emergency-routed, send it to its original target
 			# which is the link counter-clockwise to the link it arrived
-			route = self.out_links[(in_dir+1)%6]
+			route = self.out_links[topology.next_ccw(in_dir)]
 			return (route, route)
 		elif packet.destination == self.mesh_position:
 			# Packet was destined to end up at this node
@@ -232,4 +244,4 @@ class SpiNNakerRouter(object):
 			
 			# The emergency route takes the link counter-clockwise to the intended
 			# direction
-			return (self.out_links[direction], self.out_links[(direction+1)%6])
+			return (self.out_links[direction], self.out_links[topology.next_ccw(direction)])

@@ -29,8 +29,6 @@ class SpiNNakerTrafficGenerator(object):
 	            , packet_prob
 	            , injection_link
 	            , exit_link
-	            , mesh_dimensions
-	            , mesh_position = None
 	            , distance_std = None
 	            ):
 		"""
@@ -42,11 +40,6 @@ class SpiNNakerTrafficGenerator(object):
 		generator.
 		
 		exit_link is the link through which new packets are received.
-		
-		mesh_dimensions is the size of the mesh the node is in, tuple(x,y).
-		
-		mesh_position is the position of the node within the mesh, tuple(x,y) only
-		required if distance_std is not None.
 		
 		distance_std is the standard deviation of the distance along the X and Y
 		axes from the node a packet should be delivered. If None then a uniform
@@ -62,9 +55,11 @@ class SpiNNakerTrafficGenerator(object):
 		self.injection_link = injection_link
 		self.exit_link      = exit_link
 		
-		self.mesh_dimensions = mesh_dimensions
-		self.mesh_position   = mesh_position
 		self.distance_std    = distance_std
+		
+		# Initially the only chip in a one chip system
+		self.mesh_dimensions = (1,1)
+		self.mesh_position   = (0,0)
 		
 		# Statistic counters
 		self.counters = {
@@ -83,6 +78,20 @@ class SpiNNakerTrafficGenerator(object):
 		
 		# Start the generator transmitting
 		self.scheduler.do_later(self.tick, self.clock_period)
+	
+	
+	def set_mesh_dimensions(self, w, h):
+		"""
+		Set the size of the mesh this router is part of.
+		"""
+		self.mesh_dimensions = (w,h)
+	
+	
+	def set_mesh_position(self, x, y):
+		"""
+		Set the X and Y coordinates of the system the router is part of.
+		"""
+		self.mesh_position = (x,y)
 	
 	
 	def tick(self):
