@@ -6,6 +6,8 @@ Unit tests. Not comprehensive but just quick and dirty...
 
 import unittest
 
+from itertools import product
+
 from scheduler import Scheduler
 
 from link import SilistixLink
@@ -24,6 +26,7 @@ from core import SpiNNakerTrafficGenerator
 
 from network import SpiNNaker101
 from network import SpiNNaker103
+from network import SpiNNakerTorus
 
 import topology
 
@@ -1231,7 +1234,7 @@ class SpiNNaker101Tests(unittest.TestCase):
 
 class SpiNNaker103Tests(unittest.TestCase):
 	"""
-	Tests a chip in a very vague way...
+	Tests a board in a very vague way...
 	"""
 	
 	def setUp(self):
@@ -1373,6 +1376,91 @@ class SpiNNaker103Tests(unittest.TestCase):
 				self.assertEqual(self.board.get_out_link(edge,num), test_link)
 
 
+
+class SpiNNakerTorusTests(unittest.TestCase):
+	"""
+	Tests a torus of boards in a really vague way...
+	"""
+	
+	TORUS_SIZES = [(1,1), (2,2), (1,2), (2,1), (3,3), (1,3), (3,1)]
+	
+	def setUp(self):
+		# Test that packets are generated appropriately when distributing with a
+		# uniform distribution.
+		
+		self.scheduler = Scheduler()
+		self.system = SpiNNakerSystem(self.scheduler, 50000000)
+	
+	def generate_torus(self, width, height):
+		# Just instantiating the torus tests that every edge has an opposing edge
+		# (as links are added and this would crash otherwise (or rather did when I
+		# got it wrong)).
+		self.torus = SpiNNakerTorus( self.scheduler
+		                           , self.system
+		                           , width # width
+		                           , height # height
+		                           , 1  # sata_accept_period
+		                           , 4  # sata_buffer_length
+		                           , 40 # sata_latency
+		                           , 7 # silistix_send_cycles
+		                           , 7 # silistix_ack_cycles
+		                           , 4 # injection_buffer_length
+		                           , 10 # router_period
+		                           , 300000000 # wait_before_emergency
+		                           , 600000000 # wait_before_drop
+		                           , 1    # core_period
+		                           , 0.01 # packet_prob
+		                           , None # distance_std
+		                           )
+	
+	
+	def test_chip_positions(self):
+		# Try with several sizes
+		for torus_size in SpiNNakerTorusTests.TORUS_SIZES:
+			self.generate_torus(*torus_size)
+			
+			# Check that there is exactly one chip in every x/y position
+			positions = []
+			for board in self.torus.boards.itervalues():
+				for chip in board.chips.itervalues():
+					positions.append(chip.get_mesh_position())
+			
+			# Check there are no duplicates
+			self.assertEqual(len(positions), len(set(positions)))
+			
+			# Check that every chip exists that should
+			self.assertEqual(set(positions), set(product( range(self.torus.width*12)
+			                                            , range(self.torus.height*12)
+			                                            )))
+	
+	
+	def test_connections(self):
+		# Try with several sizes
+		for torus_size in SpiNNakerTorusTests.TORUS_SIZES:
+			self.generate_torus(*torus_size)
+			
+			# Get a dictionary of chips to their locations
+			chips = {}
+			for board in self.torus.boards.itervalues():
+				for chip in board.chips.itervalues():
+					chips[chip.get_mesh_position()] = chip
+			
+			# Check each chip is connected with their neighbours N, NE, W
+			for pos, chip in chips.iteritems():
+				for direction in [topology.NORTH, topology.NORTH_EAST, topology.WEST]:
+					other_pos = topology.to_xy(
+						topology.add_direction(topology.zero_pad(pos), direction))
+					other_chip = chips[( other_pos[0]%(self.torus.width*12)
+					                   , other_pos[1]%(self.torus.height*12)
+					                   , )]
+					
+					other_direction = topology.opposite(direction)
+					
+					# Make sure we share links
+					self.assertEqual(chip.get_in_link(direction),
+					                 other_chip.get_out_link(other_direction))
+					self.assertEqual(chip.get_out_link(direction),
+					                 other_chip.get_in_link(other_direction))
 
 
 if __name__=="__main__":

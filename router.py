@@ -114,6 +114,13 @@ class SpiNNakerRouter(object):
 		self.mesh_position = (x,y)
 	
 	
+	def get_mesh_position(self):
+		"""
+		Get the X and Y coordinates of the system the router is part of.
+		"""
+		return self.mesh_position
+	
+	
 	def do_route(self):
 		"""
 		Perform a single cycle of router activity.
