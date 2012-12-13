@@ -372,6 +372,8 @@ class SpiNNakerTorus(object):
 	obvious way. Three boards is the minimum number of boards in such a set and
 	this model only allows repetitions of this pattern (it may not be possible to
 	do otherwise anyway, I don't actually know).
+	
+	The full SpiNNaker 106 machine would comprise of a 20x20 board-set system.
 	"""
 	
 	def __init__( self
