@@ -11,6 +11,8 @@ from scheduler import Scheduler
 from link import SilistixLink
 from link import DeadLink
 from link import BufferLink
+from link import DelayLineLink
+from link import SATALink
 
 from system import SpiNNakerSystem
 
@@ -214,6 +216,141 @@ class LinkTests(unittest.TestCase):
 		
 		# Didn't schedule anything
 		self.assertRaises(StopIteration, s.run().next)
+	
+	def test_delay_line_link(self):
+		s = Scheduler()
+		sys = SpiNNakerSystem(s, 1000)
+		dll = DelayLineLink(s, 5)
+		
+		# An example packet
+		p = SpiNNakerP2PPacket(sys, "Data", (0,0), 1)
+		
+		# Can't receive initially but can send
+		self.assertFalse(dll.can_receive())
+		self.assertTrue(dll.can_send())
+		
+		it = s.run()
+		
+		# Does nothing (but keeps scheduling things) if we give it nothing to do
+		while it.next() < 100:
+			self.assertFalse(dll.can_receive())
+			self.assertTrue(dll.can_send())
+		# Something happens every cycle...
+		self.assertTrue(s.clock == 100)
+		
+		# Send a packet down the link
+		dll.send(p)
+		# Can't receive yet
+		self.assertFalse(dll.can_receive())
+		self.assertTrue(dll.can_send())
+		
+		# Nothing arrives in four cycles
+		while it.next() <= 104:
+			self.assertFalse(dll.can_receive())
+			self.assertTrue(dll.can_send())
+		
+		# Something arrives in the fifth cycle
+		arrived = False
+		while it.next() <= 105:
+			arrived = arrived or dll.can_receive()
+			self.assertTrue(dll.can_send())
+		self.assertTrue(arrived and dll.can_receive())
+		
+		# Can still receive even if we leave it a moment...
+		while it.next() < 150:
+			self.assertTrue(dll.can_receive())
+			self.assertTrue(dll.can_send())
+		
+		# Can receive the packet happily
+		self.assertEqual(dll.receive(), p)
+		self.assertFalse(dll.can_receive())
+		self.assertTrue(dll.can_send())
+	
+	
+	def test_sata_link(self):
+		s = Scheduler()
+		sys = SpiNNakerSystem(s, 1000)
+		num_channels = 2
+		dll = SATALink( s
+		              , num_channels  # num_channels
+		              , 2  # sata_accept_period
+		              , 1  # sata_buffer_length
+		              , 40 # sata_latency
+		              , 10 # silistix_send_cycles
+		              , 5  # silistix_ack_cycles
+		              )
+		
+		# Example packets
+		packets = [SpiNNakerP2PPacket(sys, "Data %d"%n, (0,0), 1)
+		           for n in range(num_channels)]
+		
+		channels = [dll.get_channel_link(n) for n in range(num_channels)]
+		
+		it = s.run()
+		it_next = 0
+		
+		# Can only send initially
+		while it.next() < it_next + 100:
+			for c in channels:
+				self.assertTrue(c.can_send())
+				self.assertFalse(c.can_receive())
+		it_next += 100
+		
+		
+		# Can send packets down each channel individually?
+		for p,c in zip(packets,channels):
+			# Put the packet in the channel
+			self.assertTrue(c.can_send())
+			c.send(p)
+			self.assertFalse(c.can_send())
+			
+			while it.next() < it_next + 100:
+				# Check nothing happens on the other channels
+				for c_ in channels:
+					if c != c_:
+						self.assertTrue(c_.can_send())
+						self.assertFalse(c_.can_receive())
+			it_next += 100
+			
+			# Check the packet arrived
+			self.assertTrue(c.can_receive())
+			self.assertEqual(c.receive(), p)
+			self.assertFalse(c.can_receive())
+		
+		# Can send packets down each channels all at once?
+		for p,c in zip(packets,channels):
+			self.assertTrue(c.can_send())
+			c.send(p)
+			self.assertFalse(c.can_send())
+		
+		# Wait for them all to get there
+		while it.next() < it_next + 100:
+			pass
+		it_next += 100
+			
+		# Check the packets arrived
+		for p,c in zip(packets,channels):
+			self.assertTrue(c.can_receive())
+			self.assertEqual(c.receive(), p)
+			self.assertFalse(c.can_receive())
+		
+		# Can a single channel block while all others don't?
+		while channels[0].can_send():
+			self.assertTrue(channels[0].can_send())
+			channels[0].send(p)
+			self.assertFalse(channels[0].can_send())
+			
+			# Wait for the packet to get buffered
+			while it.next() < it_next + 100:
+				pass
+			it_next += 100
+		
+		# Channel is blocked
+		self.assertFalse(channels[0].can_send())
+		
+		# Other channels are not
+		for c in channels[1:]:
+			self.assertTrue(c.can_send())
 
 
 
