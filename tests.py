@@ -24,9 +24,9 @@ from router import SpiNNakerRouter
 
 from core import SpiNNakerTrafficGenerator
 
-from network import SpiNNaker101
-from network import SpiNNaker103
-from network import SpiNNakerTorus
+from top import SpiNNaker101
+from top import SpiNNaker103
+from top import SpiNNakerTorus
 
 import topology
 

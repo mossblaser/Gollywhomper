@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 """
-Network primitives such as "chips", "boards" and "tiles".
+Top-level models of systems that might exist in practice (chips/boards/whole
+toruses).
 """
 
 from router import SpiNNakerRouter
