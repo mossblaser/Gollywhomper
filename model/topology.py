@@ -134,6 +134,10 @@ def get_path(src, dst, bounds = None):
 	assert(len(src) == len(dst) == 3)
 	assert(bounds is None or len(bounds) == 2)
 	
+	# Convert to shortest path to ensure calculation produces a shortest path
+	src = to_shortest_path(src)
+	dst = to_shortest_path(dst)
+	
 	# If bounded, re-centre the world around the source
 	if bounds is not None:
 		dst = ( ((dst[0] - src[0]) + bounds[0]/2)   % bounds[0]
