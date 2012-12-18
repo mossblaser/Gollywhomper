@@ -153,13 +153,13 @@ def get_path(src, dst, bounds = None):
 			          , int(bounds[1]*centre)
 			          , 0
 			          )
-			new_delta = to_shortest_path(tuple(d-s for (s,d) in zip(new_src, new_dst)))
+			new_delta = to_shortest_path(zero_pad(tuple(d-s for (s,d) in zip(new_src, new_dst))))
 			if delta is None or manhattan(new_delta) < manhattan(delta):
 				delta = new_delta
 		
 	else:
 		# The path is simply a delta of the source and destination
-		delta = to_shortest_path(tuple(d-s for (s,d) in zip(src, dst)))
+		delta = to_shortest_path(zero_pad(tuple(d-s for (s,d) in zip(src, dst))))
 	
 	# Return the shortest path to the given point
 	return delta
