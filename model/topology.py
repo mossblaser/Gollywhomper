@@ -134,27 +134,35 @@ def get_path(src, dst, bounds = None):
 	assert(len(src) == len(dst) == 3)
 	assert(bounds is None or len(bounds) == 2)
 	
+	src = to_xy(src)
+	dst = to_xy(dst)
+	
 	# If bounded, re-centre the world around the source
 	if bounds is not None:
-		dst = ( ((dst[0] - src[0]) + bounds[0]/2)   % bounds[0]
-		      , ((dst[1] - src[1]) + bounds[1]/2)   % bounds[1]
-		      , ((dst[2] - src[2]) + min(bounds)/2) % min(bounds)
-		      )
-		src = ( bounds[0]/2
-		      , bounds[1]/2
-		      , min(bounds)/2
-		      )
-	
-	# Convert to shortest path to ensure calculation produces a shortest path
-	src = to_shortest_path(src)
-	dst = to_shortest_path(dst)
-	
-	
-	# The path is simply a delta of the source and destination
-	delta = tuple(d-s for (s,d) in zip(src, dst))
+		delta = None
+		# This is a terrible hack. Re-centre the world around the bottom left,
+		# center and top-right in order to find the /actual/ shortest path. I and
+		# a number of other very helpful people have spent literally hours and hours
+		# on trying to solve this problem elegantly before I gave up and did this...
+		for centre in (0.0, 0.5, 1):
+			new_dst = ( ((dst[0] - src[0]) + int(bounds[0]*centre))   % bounds[0]
+			          , ((dst[1] - src[1]) + int(bounds[1]*centre))   % bounds[1]
+			          , 0
+			          )
+			new_src = ( int(bounds[0]*centre)
+			          , int(bounds[1]*centre)
+			          , 0
+			          )
+			new_delta = to_shortest_path(tuple(d-s for (s,d) in zip(new_src, new_dst)))
+			if delta is None or manhattan(new_delta) < manhattan(delta):
+				delta = new_delta
+		
+	else:
+		# The path is simply a delta of the source and destination
+		delta = to_shortest_path(tuple(d-s for (s,d) in zip(src, dst)))
 	
 	# Return the shortest path to the given point
-	return to_shortest_path(delta)
+	return delta
 
 
 def zero_pad(vector, length = 3):
