@@ -244,6 +244,12 @@ class DelayLineLink(Link):
 		assert(self.can_receive())
 		packet, _ = self.packet_buffer.pop(0)
 		return packet
+	
+	
+	def peek(self):
+		assert(self.can_receive())
+		packet, _ = self.packet_buffer[0]
+		return packet
 
 
 
@@ -405,6 +411,10 @@ class SATALink(Link):
 		
 		def receive(self):
 			return self.sata_link.out_links[self.channel_num].receive()
+		
+		
+		def peek(self):
+			return self.sata_link.out_links[self.channel_num].peek()
 	
 	
 	def get_channel_link(self, channel_num):

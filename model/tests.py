@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 """
-Unit tests. Not comprehensive but just quick and dirty...
+Unit tests. Not comprehensive but just quick and dirty... Usage:
+
+python tests.py
 """
 
 import unittest
@@ -1399,6 +1401,7 @@ class SpiNNakerTorusTests(unittest.TestCase):
 		                           , self.system
 		                           , width # width
 		                           , height # height
+		                           , True # use_sata_links
 		                           , 1  # sata_accept_period
 		                           , 4  # sata_buffer_length
 		                           , 40 # sata_latency

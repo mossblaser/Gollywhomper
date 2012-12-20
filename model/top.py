@@ -384,6 +384,8 @@ class SpiNNakerTorus(object):
 	            , width
 	            , height
 	            
+	            , use_sata_links
+	            
 	            , sata_accept_period      # SATALink
 	            , sata_buffer_length      # SATALink
 	            , sata_latency            # SATALink
@@ -405,6 +407,9 @@ class SpiNNakerTorus(object):
 		width is the number of three-board board-sets wide the system will be.
 		
 		height is the number of three-board board-sets tall the system will be.
+		
+		use_sata_links is a decision whether or not to use sata links to connect
+		boards. If false, regular links are used.
 		
 		sata_accept_period see SATALink
 		sata_buffer_length see SATALink
@@ -499,32 +504,52 @@ class SpiNNakerTorus(object):
 			                          ):
 				other_board = self.boards[other_coords]
 				
-				# From board to other_board
-				in_link = SATALink( self.scheduler
-				                  , 8 # num_channels
-				                  , sata_accept_period
-				                  , sata_buffer_length
-				                  , sata_latency
-				                  , silistix_send_cycles
-				                  , silistix_ack_cycles
-				                  )
-				# From other_board to board
-				out_link = SATALink( self.scheduler
-				                   , 8 # num_channels
-				                   , sata_accept_period
-				                   , sata_buffer_length
-				                   , sata_latency
-				                   , silistix_send_cycles
-				                   , silistix_ack_cycles
-				                   )
+				if use_sata_links:
+					# From board to other_board
+					in_link = SATALink( self.scheduler
+					                  , 8 # num_channels
+					                  , sata_accept_period
+					                  , sata_buffer_length
+					                  , sata_latency
+					                  , silistix_send_cycles
+					                  , silistix_ack_cycles
+					                  )
+					# From other_board to board
+					out_link = SATALink( self.scheduler
+					                   , 8 # num_channels
+					                   , sata_accept_period
+					                   , sata_buffer_length
+					                   , sata_latency
+					                   , silistix_send_cycles
+					                   , silistix_ack_cycles
+					                   )
+					
+					# Link up each of the channels on this edge in both directions
+					for channel in range(8):
+						in_channel  = in_link.get_channel_link(channel)
+						out_channel = out_link.get_channel_link(channel)
+						
+						board.set_in_link(edge, channel,  in_channel)
+						board.set_out_link(edge, channel, out_channel)
+						
+						other_board.set_out_link(topology.opposite(edge), channel, in_channel)
+						other_board.set_in_link(topology.opposite(edge), channel,  out_channel)
 				
-				# Link up each of the channels on this edge in both directions
-				for channel in range(8):
-					in_channel  = in_link.get_channel_link(channel)
-					out_channel = out_link.get_channel_link(channel)
-					
-					board.set_in_link(edge, channel,  in_channel)
-					board.set_out_link(edge, channel, out_channel)
-					
-					other_board.set_out_link(topology.opposite(edge), channel, in_channel)
-					other_board.set_in_link(topology.opposite(edge), channel,  out_channel)
+				else:
+					# Link up each of the channels on this edge in both directions with
+					# SilistixLinks
+					for channel in range(8):
+						in_link  = SilistixLink( self.scheduler
+						                       , silistix_send_cycles
+						                       , silistix_ack_cycles
+						                       )
+						out_link = SilistixLink( self.scheduler
+						                       , silistix_send_cycles
+						                       , silistix_ack_cycles
+						                       )
+						
+						board.set_in_link(edge, channel,  in_link)
+						board.set_out_link(edge, channel, out_link)
+						
+						other_board.set_out_link(topology.opposite(edge), channel, in_link)
+						other_board.set_in_link(topology.opposite(edge), channel,  out_link)

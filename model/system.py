@@ -20,6 +20,9 @@ class SpiNNakerSystem(object):
 		self.scheduler         = scheduler
 		self.time_phase_period = time_phase_period
 		
+		# A list of all packets placed into the system
+		self.packets = []
+		
 		self.time_phase = None
 		self.advance_timephase()
 	

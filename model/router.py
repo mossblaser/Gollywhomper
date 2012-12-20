@@ -166,6 +166,9 @@ class SpiNNakerRouter(object):
 					packet.distance += 1
 					packet.wait      = 0
 					packet.emergency = True
+					packet.emergency_time.append(self.scheduler.clock)
+					packet.emergency_location.append(self.mesh_position)
+					# Send the packet via emergency route
 					emg_link.send(src_link.receive())
 					self.counters["packet_emergency_routed"] += 1
 					
@@ -200,7 +203,9 @@ class SpiNNakerRouter(object):
 					break
 				
 				# Get rid of it from the queue
-				link.receive()
+				packet = link.receive()
+				packet.drop_time = self.scheduler.clock
+				packet.drop_location = self.mesh_position
 	
 	
 	def links_in_service_order(self):

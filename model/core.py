@@ -16,11 +16,11 @@ class SpiNNakerTrafficGenerator(object):
 	receives and discards incoming packets. This is designed to act on behalf of
 	the 18 cores which make up a single SpiNNaker chip/node.
 	
-	All packets sent are 40 bits long and their payload is a reference to this
-	object.
+	All packets sent are 1 unit long (40 bits in SpiNNaker) and their payload is a
+	reference to this object.
 	"""
 	
-	PACKET_LENGTH = 40
+	PACKET_LENGTH = 1
 	
 	def __init__( self
 	            , scheduler
@@ -94,6 +94,21 @@ class SpiNNakerTrafficGenerator(object):
 		self.mesh_position = (x,y)
 	
 	
+	def get_random_dest(self):
+		"""
+		Pick a random destination for packets
+		"""
+		if self.distance_std is None:
+			# Uniform distribution
+			dest = tuple(randint(0, dimension-1) for dimension in self.mesh_dimensions)
+		else:
+			# Normal distribution
+			dest = tuple(int(normalvariate(position, self.distance_std)) % dimension
+			             for position, dimension
+			             in zip(self.mesh_position, self.mesh_dimensions))
+		return dest
+	
+	
 	def tick(self):
 		"""
 		Perform a single CPU tick.
@@ -104,32 +119,34 @@ class SpiNNakerTrafficGenerator(object):
 		# Absorb any packets sent to us.
 		while self.exit_link.can_receive():
 			packet = self.exit_link.receive()
+			# Add final meta-data
+			packet.receive_time = self.scheduler.clock
+			# Update counters
 			self.counters["generator_packets_received"] += 1
 		
 		# Possibly send a packet out
 		if random() < self.packet_prob:
+			# Select the packet destination
+			dest = self.get_random_dest()
+			
+			# Send a packet with a reference to this object as a payload and the given
+			# destination.
+			packet = SpiNNakerP2PPacket(self.system, self, dest,
+			                            SpiNNakerTrafficGenerator.PACKET_LENGTH)
+			# Add meta-data
+			packet.source    = self.mesh_position
+			packet.send_time = self.scheduler.clock
+			
 			if not self.injection_link.can_send():
 				# Can't send so we must drop the packet!
+				packet.drop_time = self.scheduler.clock
+				packet.drop_location = self.mesh_position
 				self.counters["generator_dropped_packets"] += 1
 			else:
-				# Can send, generate a packet and send it!
-				
-				# Select the packet destination
-				if self.distance_std is None:
-					# Uniform distribution
-					dest = tuple(randint(0, dimension-1) for dimension in self.mesh_dimensions)
-				else:
-					# Normal distribution
-					dest = tuple(int(normalvariate(position, self.distance_std)) % dimension
-					             for position, dimension
-					             in zip(self.mesh_position, self.mesh_dimensions))
-				
-				# Send a packet with a reference to this object as a payload and the given
-				# destination.
-				packet = SpiNNakerP2PPacket(self.system, self, dest,
-				                            SpiNNakerTrafficGenerator.PACKET_LENGTH)
+				# Send the packet
 				self.injection_link.send(packet)
 				self.counters["generator_injected_packets"] += 1
+				
 		
 		# Schedule the next tick
 		self.scheduler.do_later(self.tick, self.clock_period)
