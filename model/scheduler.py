@@ -61,7 +61,7 @@ class Scheduler(object):
 				# ready task while we were yielded...)
 				if not self.ready:
 					self.ready    = self.inactive
-					self.Inactive = []
+					self.inactive = []
 			
 			# Advance the clock to the next set of postponed tasks and mark them as
 			# ready to run
